@@ -120,56 +120,61 @@ void process_input(int argc, char **argv) {
   for(commandCount = 0; commands[commandCount] != NULL; commandCount++) {
 
     int pipe_pid = fork();
-      //printf("|");
-      if( pipe_pid == 0 ) {
-        write(2, "aaaaa", 5);
-        // Open read feed so long as it is not the first command
-        //printf("%s", commands[commandCount][0]);
-        if( commandCount != 0 ) {
-          if( dup2(pipefds[(commandCount-1)*2], 0) < 0 ) {
-            fprintf(stderr, "ERROR - Pipe Redirection input");
-            exit(-1);
-          }
+    //printf("|");
+    if( pipe_pid == 0 ) {
+      // Open read feed so long as it is not the first command
+      //printf("%s", commands[commandCount][0]);
+      if( commandCount != 0 ) {
+        write(1, "NOTE: ", 6);
+        printf("linking cmd %d to read feed %d from %d\n", commandCount, (commandCount-1)*2, fileno(stdin));
+        if( dup2(pipefds[(commandCount-1)*2], 0) < 0 ) {
+          fprintf(stderr, "ERROR - Pipe Redirection input");
+          _Exit(3);
         }
-
-        // Open write feed so long as it is no the final command
-        if( commands[commandCount+1] != NULL ) {
-          if(commandCount != 1) {
-            printf("not last");
-            if( dup2(pipefds[commandCount*2+1], 1) < 0 ) {
-              fprintf(stderr, "ERROR - Pipe Redirection output");
-              exit(-1);
-            }
-          }
-        }
-        // Close child's file descriptors 
-        close(pipefds[(commandCount-1)*2]);
-        close(pipefds[commandCount*2+1]);
-
-        // Execute. I'm guessing this needs to go elsewhere?      
-        if(execvp(commands[commandCount][0], commands[commandCount]) == -1) {
-          fprintf(stderr, "ERROR - execvp failed (piped)");
-          exit(-1);
-        }
-        exit(0);
-      } else if (pid < 0) {
-        fprintf(stderr, "ERROR - forking for pipe");
-        exit(-1);
       }
-      else {
-        commandCount++;
+
+      // Open write feed so long as it is no the final command
+      if( commands[commandCount+1] != NULL ) {
+        write(1, "NOTE: ", 6);
+        printf("linking cmd %d to write feed %d from %d\n", commandCount, commandCount*2+1, fileno(stdout));
+        if( dup2(pipefds[commandCount*2+1], 1) < 0 ) {
+          fprintf(stderr, "ERROR - Pipe Redirection output");
+          _Exit(3);
+        }
       }
+      // Close child's file descriptors 
+      close(pipefds[(commandCount-1)*2]);
+      close(pipefds[commandCount*2+1]);
+
+      // Execute. I'm guessing this needs to go elsewhere?      
+      if(execvp(commands[commandCount][0], commands[commandCount]) == -1) {
+        fprintf(stderr, "ERROR - execvp failed (piped)");
+        _Exit(3);
+      }
+      else
+        exit(EXIT_SUCCESS);
+    } else if (pid < 0) {
+      fprintf(stderr, "ERROR - forking for pipe");
+      _Exit(3);
+    }
+    else {
+      int pid = pipe_pid;
+      printf("%d launched\n", pid);
+      wait(&pipe_pid);
+      printf("%d received\n", pid);
+    }
   }
   // Close parent's file descriptors
   for(count  = 0; count < 2*pipeCount; count++ ) {
     close( pipefds[count] );
   }
+  write(1, "prompt\n", 7);
+  exit(EXIT_SUCCESS);
 //  if (execvp(argv[0], argv) == -1) {
 //    perror("Shell Program");
 //      exit(-1);
 //  } 
 }
-
 /* ----------------------------------------------------------------- */
 /*                  parse input line into argc/argv format           */
 /* ----------------------------------------------------------------- */
@@ -273,4 +278,3 @@ int main(void)
      printf("child process was stopped by signal %d\n", WIFSTOPPED(status));
  }
 }
-~                         
